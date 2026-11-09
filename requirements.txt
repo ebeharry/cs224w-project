@@ -1,0 +1,8 @@
+# also: pip install pyg-lib -f https://data.pyg.org/whl/torch-2.14.0+cpu.html
+torch==2.14.0
+torch_geometric==2.8.1
+scikit-learn==1.9.1
+pandas
+gdown
+pytest
+matplotlib
