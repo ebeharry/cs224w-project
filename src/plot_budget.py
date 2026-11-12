@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 SERIES = "#2a78d6"     # GNN points
+SERIES_2 = "#eb6834"   # GNN points, scaled features
 REFERENCE = "#52514e"  # random-forest reference line
 TEXT = "#0b0b0b"
 MUTED = "#8a8985"
@@ -14,7 +15,9 @@ MUTED = "#8a8985"
 def main():
     df = pd.read_csv("results/results.csv")
     rf = df[df.model == "RandomForest"].iloc[0]
+    mlp = df[df.model == "MLP"].iloc[0]
     gnn = df[df.model == "RelGNN"].sort_values("avg_cost_mean")
+    gnn_scaled = df[df.model == "RelGNN (scaled)"].sort_values("avg_cost_mean")
 
     plt.rcParams.update({"font.size": 9, "font.family": "serif",
                          "axes.edgecolor": MUTED, "axes.labelcolor": TEXT,
@@ -27,18 +30,31 @@ def main():
     ax.text(5, rf_mean - 0.25, "random forest (no graph, cost 0)",
             color=REFERENCE, fontsize=8, va="top")
 
+    mlp_mean, mlp_std = 100 * mlp.balanced_accuracy_mean, 100 * mlp.balanced_accuracy_std
+    ax.axhspan(mlp_mean - mlp_std, mlp_mean + mlp_std, color=REFERENCE, alpha=0.08, lw=0)
+    ax.axhline(mlp_mean, color=REFERENCE, lw=1.2, ls=(0, (1, 2)))
+    ax.text(5, mlp_mean - 0.25, "MLP (no graph)",
+            color=REFERENCE, fontsize=8, va="top")
+
     x = gnn.avg_cost_mean
     y = 100 * gnn.balanced_accuracy_mean
     err = 100 * gnn.balanced_accuracy_std
     ax.errorbar(x, y, yerr=err, color=SERIES, lw=2, marker="o", ms=6,
-                mec="white", mew=1.5, capsize=3, elinewidth=1.2, zorder=3)
+                mec="white", mew=1.5, capsize=3, elinewidth=1.2, zorder=3,
+                label="RelGNN (raw features)")
     for xi, yi, budget in zip(x, y, gnn.budget):
         ax.annotate(budget, (xi, yi), xytext=(6, 7), textcoords="offset points",
                     ha="left", va="bottom", fontsize=8, color=TEXT)
 
+    ax.errorbar(gnn_scaled.avg_cost_mean, 100 * gnn_scaled.balanced_accuracy_mean,
+                yerr=100 * gnn_scaled.balanced_accuracy_std, color=SERIES_2, lw=2,
+                marker="o", ms=6, mec="white", mew=1.5, capsize=3, elinewidth=1.2,
+                zorder=3, label="RelGNN (scaled features)")
+    ax.legend(loc="lower right", fontsize=8, frameon=False, labelcolor=TEXT)
+
     ax.set_xscale("log")
     ax.set_xlim(4, 2e4)
-    ax.set_ylim(85, 91.5)
+    ax.set_ylim(85, 92.5)
     ax.set_xlabel("Average accounts fetched per target (log scale)")
     ax.set_ylabel("Balanced accuracy (%)")
     ax.grid(axis="y", color=MUTED, alpha=0.25, lw=0.6)

@@ -1,5 +1,6 @@
 """Train and evaluate RelGNN under each neighborhood budget."""
 import argparse
+import copy
 import time
 
 import numpy as np
@@ -7,7 +8,7 @@ import torch
 import torch.nn.functional as F
 
 from budget import BUDGETS, budget_name, fetch_cost, make_loader
-from data import load_mgtab
+from data import SCALINGS, load_mgtab, scale_features
 from evaluate import METRICS, evaluate, save_result, summarize
 from models import RelGNN
 from splits import SEEDS, get_split
@@ -17,6 +18,8 @@ LR = 1e-3
 WEIGHT_DECAY = 5e-4
 MAX_EPOCHS = 100
 PATIENCE = 10  # epochs without val-F1 improvement before stopping
+MODEL_NAMES = {"none": "RelGNN", "standard": "RelGNN (scaled)",
+               "text-minmax": "RelGNN (text minmax)"}
 
 
 def train_epoch(model, loader, optimizer):
@@ -43,10 +46,13 @@ def predict(model, loader, record_cost=False):
     return torch.cat(labels).numpy(), torch.cat(preds).numpy(), costs
 
 
-def run_one(data, k, f, seed):
+def run_one(data, k, f, seed, scaling="none"):
     """Train on one split with early stopping on val F1, then test node by node."""
     torch.manual_seed(seed)
     train_idx, val_idx, test_idx = get_split(data.num_nodes, seed)
+    if scaling != "none":
+        data = copy.copy(data)
+        data.x = scale_features(data.x, train_idx, scaling)
     train_loader = make_loader(data, train_idx, k, f, BATCH_SIZE, shuffle=True)
     val_loader = make_loader(data, val_idx, k, f, BATCH_SIZE)
 
@@ -80,20 +86,22 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--seeds", type=int, nargs="+", default=SEEDS)
     parser.add_argument("--budget", type=int, nargs=2, metavar=("K", "F"))
+    parser.add_argument("--scaling", choices=SCALINGS, default="none")
     args = parser.parse_args()
     budgets = [tuple(args.budget)] if args.budget else BUDGETS
+    model_name = MODEL_NAMES[args.scaling]
 
     data = load_mgtab()
     for k, f in budgets:
         name = budget_name(k, f)
-        print(f"\n=== RelGNN, budget {name} ===", flush=True)
+        print(f"\n=== {model_name}, budget {name} ===", flush=True)
         start = time.time()
-        per_seed = [run_one(data, k, f, seed) for seed in args.seeds]
+        per_seed = [run_one(data, k, f, seed, args.scaling) for seed in args.seeds]
         summary = summarize(per_seed)
         print(f"  mean: " + "  ".join(f"{m}={summary[m][0]:.4f}±{summary[m][1]:.4f}"
                                       for m in METRICS + ["avg_cost"])
               + f"   ({time.time() - start:.0f}s)", flush=True)
-        save_result("RelGNN", name, summary, len(args.seeds))
+        save_result(model_name, name, summary, len(args.seeds))
 
 
 if __name__ == "__main__":

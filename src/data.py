@@ -1,5 +1,6 @@
 """Load MGTAB into a PyG Data object."""
 import torch
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from torch_geometric.data import Data
 
 from dataset import MGTAB
@@ -12,6 +13,26 @@ NUM_RELATIONS = len(RELATIONS)
 # 20 profile features in [0, 1], then the 768-dim LaBSE text embedding.
 PROFILE_COLS = list(range(0, 20))
 TEXT_COLS = list(range(20, 788))
+
+SCALINGS = ["none", "standard", "text-minmax"]
+
+
+def scale_features(x, train_idx, scaling):
+    """Rescale x using statistics from the train rows only.
+
+    standard: StandardScaler on every column.
+    text-minmax: MinMaxScaler on the text columns; profile columns unchanged.
+    """
+    if scaling == "none":
+        return x
+    if scaling == "standard":
+        cols, scaler = list(range(x.size(1))), StandardScaler()
+    else:
+        cols, scaler = TEXT_COLS, MinMaxScaler()
+    scaler.fit(x[train_idx][:, cols].numpy())
+    x = x.clone()
+    x[:, cols] = torch.from_numpy(scaler.transform(x[:, cols].numpy())).float()
+    return x
 
 
 def inspect_feature_layout(x):

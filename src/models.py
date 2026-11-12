@@ -35,3 +35,29 @@ class RelGNN(nn.Module):
             h = F.relu(conv(h, edge_index, edge_type))
             h = F.dropout(h, self.dropout, self.training)
         return self.head(h)
+
+
+class MLP(nn.Module):
+    """RelGNN with each RGCNConv replaced by a Linear layer (no graph)."""
+
+    def __init__(self, hidden=128, dropout=0.3):
+        super().__init__()
+        self.register_buffer("profile_cols", torch.tensor(PROFILE_COLS))
+        self.register_buffer("text_cols", torch.tensor(TEXT_COLS))
+        self.profile_enc = nn.Linear(len(PROFILE_COLS), hidden // 2)
+        self.text_enc = nn.Linear(len(TEXT_COLS), hidden // 2)
+        self.lin1 = nn.Linear(hidden, hidden)
+        self.lin2 = nn.Linear(hidden, hidden)
+        self.head = nn.Linear(hidden, 2)
+        self.dropout = dropout
+
+    def forward(self, x):
+        h = torch.cat([
+            F.leaky_relu(self.profile_enc(x[:, self.profile_cols])),
+            F.leaky_relu(self.text_enc(x[:, self.text_cols])),
+        ], dim=1)
+        h = F.dropout(h, self.dropout, self.training)
+        for lin in (self.lin1, self.lin2):
+            h = F.relu(lin(h))
+            h = F.dropout(h, self.dropout, self.training)
+        return self.head(h)
